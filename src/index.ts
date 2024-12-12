@@ -1,12 +1,11 @@
 // src/index.ts
 import express from 'express';
-//import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import transcriptionRoutes from './routes/transcription';
 import multer from 'multer';
 import axios from 'axios';
 import { Request, Response } from 'express';
+import OpenAI from 'openai';
 
 // load env vars
 dotenv.config();
@@ -49,6 +48,87 @@ app.listen(port, () => {
 
 //app.use('/api', transcriptionRoutes);
 
+app.post('/generate-diary', async (req: Request, res: Response) => {
+    try {
+        const { text, style } = req.body;
+        console.log('Received request to generate diary with style:', style);
+        console.log('Text:', text);
+
+        // Define the type for stylePrompts
+        const stylePrompts: { [key: string]: string } = {
+            casual: "Rewrite this as a casual, friendly diary entry, using everyday language and a conversational tone in the same language as the given text:",
+            formal: "Transform this into a formal, professional diary entry with sophisticated language and structure in the same language as the given text:",
+            poetic: "Convert this into a poetic and creative diary entry, using metaphors and vivid imagery in the same language as the given text:",
+            reflective: "Create a deep, reflective diary entry from this text, focusing on personal insights and emotional depth in the same language as the given text:"
+        };
+
+        const prompt = stylePrompts[style] || stylePrompts.casual;
+        const response = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: "gpt-4",
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are a skilled diary writer who can transform spoken thoughts into beautiful diary entries."
+                    },
+                    {
+                        role: "user",
+                        content: `${prompt}\n\n${text}`
+                    }
+                ],
+                temperature: 0.7,
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        const diaryEntry = response.data.choices[0].message.content;
+        console.log('Done with entry text');
+        
+        // Then generate a title based on the diary entry
+        const titleResponse = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: "gpt-4",
+                messages: [
+                    {
+                        role: "system",
+                        content: "Generate a short, engaging title (maximum 5 words) for this diary entry:"
+                    },
+                    {
+                        role: "user",
+                        content: diaryEntry
+                    }
+                ],
+                temperature: 0.7,
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        
+        const title = titleResponse.data.choices[0].message.content;
+        console.log('Done generating title:', title);
+        
+        res.json({ 
+            entry: diaryEntry,
+            title: title
+        });
+
+    } catch (error) {
+        console.error('Diary generation error:', error);
+        res.status(500).json({ error: 'Failed to generate diary entry' });
+    }
+});
 
 app.post('/transcribe', upload.single('audioFile'), async (req: Request, res: Response) => {
     console.log('Transcribe route hit');
