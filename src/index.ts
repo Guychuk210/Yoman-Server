@@ -11,20 +11,26 @@ import OpenAI from 'openai';
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
 
 const upload = multer();
-// Configure CORS options
+// Add API configuration at the top
+const RENDER_URL = 'https://yoman-server.onrender.com'; 
+const LOCAL_URL = 'http://localhost:5000';
+const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
+
+// Update CORS options to accept requests from your Render domain
 const corsOptions = {
     origin: [
-        'http://localhost:19006', // Default Expo web port
-        'http://localhost:19000', // Default Expo development port
-        'exp://localhost:19000', // Expo development URL
-        'exp://192.168.1.*',     // Local network Expo URLs
-        'http://192.168.1.*',     // Local network Expo URLs
-        'http://192.168.10.119',     // Local network Expo URLs
-        'http://localhost:5000', // Localhost server URL
-        // Add any other URLs your app might use
+        'http://localhost:19006',
+        'http://localhost:19000',
+        'exp://localhost:19000',
+        'exp://192.168.1.*',
+        'http://192.168.1.*',
+        'http://192.168.10.119',
+        'http://localhost:5000',
+        RENDER_URL, // Add your Render URL
+        '*' // Allow all origins in development (be careful with this in production)
     ],
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -42,8 +48,9 @@ app.get('/test', (req, res) => {
   res.json({ message: 'Server is running' });
 });
 
-app.listen(port, () => {
-  console.log(`server running on port ${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server running on port ${port}`);
+    console.log(`Server URL: ${API_BASE_URL}`);
 });
 
 //app.use('/api', transcriptionRoutes);
