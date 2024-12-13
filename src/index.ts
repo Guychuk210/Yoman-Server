@@ -65,7 +65,7 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
         const stylePrompts: { [key: string]: string } = {
             casual: "Rewrite this as a casual, friendly diary entry, using everyday language and a conversational tone in the same language as the given text:",
             formal: "Transform this into a formal, professional diary entry with sophisticated language and structure in the same language as the given text:",
-            poetic: "Convert this into a poetic and creative diary entry, using metaphors and vivid imagery in the same language as the given text:",
+            raw: "Rewrite this entry, don't change anything, just re-arrange the text and make it readable using the same language as the given text",
             reflective: "Create a deep, reflective diary entry from this text, focusing on personal insights and emotional depth in the same language as the given text:"
         };
 
