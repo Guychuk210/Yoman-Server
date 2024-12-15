@@ -1,0 +1,15 @@
+const { text, style, assistantId } = req.body;
+    console.log('Received request to generate diary with style:', style);
+    
+    // If no assistantId is provided, create a new assistant
+    let currentAssistantId = assistantId;
+    if (!currentAssistantId) {
+      const assistant = await openai.beta.assistants.create({
+        name: "Personal Diary Assistant",
+        instructions: `You are a personal diary assistant. Your role is to help transform thoughts and experiences into meaningful diary entries. 
+        Remember the user's writing style preferences and personal context over time.
+        Always maintain the same language as the input text.`,
+        model: "gpt-4-turbo-preview"
+      });
+      currentAssistantId = assistant.id;
+    }
