@@ -17,8 +17,8 @@ const upload = multer();
 // Add API configuration at the top
 const RENDER_URL = 'https://yoman-server.onrender.com'; 
 const LOCAL_URL = 'http://192.168.10.68:5000';
-//const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
-const API_BASE_URL = LOCAL_URL;
+const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
+//const API_BASE_URL = LOCAL_URL;
 
 // Initialize the OpenAI client
 const openai = new OpenAI({
