@@ -16,7 +16,7 @@ const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
 const upload = multer();
 // Add API configuration at the top
 const RENDER_URL = 'https://yoman-server.onrender.com'; 
-const LOCAL_URL = 'http://192.168.10.68:5000';
+const LOCAL_URL = 'http://192.168.10.119:5000';
 const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
 //const API_BASE_URL = LOCAL_URL;
 
@@ -83,7 +83,44 @@ ${newInfo}`;
   }
 }
 
-// Modify the diary generation endpoint to update assistant memory
+// Define style-specific instructions
+const STYLE_INSTRUCTIONS = {
+  casual: `Transform this entry into a casual, conversational diary style. 
+    - Use casual language and little bit of everyday expressions
+    - Include emojis where appropriate
+    - Write as if talking to a close friend
+    - Keep the tone light and personal
+    - Organize thoughts in a clear, logical manner
+    - You can use abbreviations and casual phrases
+    - Try to write the diary as most people would write it
+    - Generate the output in the same language as the input`,
+
+  formal: `Transform this entry into a formal, structured diary style.
+    - Use professional and refined language
+    - Maintain proper grammar and punctuation
+    - Organize thoughts in a clear, logical manner
+    - Avoid colloquialisms and slang
+    - Focus on precise and articulate expression
+    - Generate the output in the same language as the input`,
+
+  raw: `Keep this entry exactly as provided, with minimal modifications.
+    - Maintain the original wording
+    - Only correct obvious typos
+    - Preserve the authentic voice and style
+    - Keep all original expressions and phrases
+    - Maintain the original flow of thoughts
+    - Generate the output in the same language as the input`,
+
+  reflective: `Transform this entry into a thoughtful, introspective style.
+    - Include personal insights and realizations
+    - Connect experiences to deeper meanings
+    - Explore emotions and their implications
+    - Consider lessons learned and growth
+    - Include philosophical or contemplative elements
+    - Generate the output in the same language as the input`,
+};
+
+// Modify the diary generation endpoint
 app.post('/generate-diary', async (req: Request, res: Response) => {
   try {
     const { text, style, assistantId } = req.body;
@@ -98,7 +135,7 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
       console.log('Creating new assistant...');
       const assistant = await openai.beta.assistants.create({
         name: "Personal Diary Assistant",
-        instructions: `You are a personal diary assistant. Your role is to help transform thoughts and experiences into diary entries. 
+        instructions: `You are a diary assistant. Your role is to help transform thoughts and experiences into diary entries. In general, don't change text and style too much, but make it more organized and personal.
         Do Remember user preferences and personal context across all conversations, remember personal details about him as we will be retriving this information.
         Always maintain the same language as the input text.`,
         model: "gpt-4-turbo-preview",
@@ -108,16 +145,18 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
       console.log('New assistant created:', currentAssistantId);
     }
 
-    // Create thread and add initial message
+    // Create thread and add initial message with style-specific instructions
     const thread = await openai.beta.threads.create();
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
-      content: `Style: ${style}\nContent: ${text}`
+      content: `Style Instructions: ${STYLE_INSTRUCTIONS[style as keyof typeof STYLE_INSTRUCTIONS]}            
+                Content to transform: ${text}`
     });
 
     // Start first run and wait for completion
     const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: currentAssistantId
+      assistant_id: currentAssistantId,
+      temperature: 0.3
     });
 
     // Wait for the run to complete
@@ -137,11 +176,12 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
     // Generate title using the same assistant
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
-      content: "Generate a short, engaging title (maximum 5 words) for this diary entry."
+      content: "Generate a short title for this diary entry. (Maximum 6 words)"
     });
 
     const titleRun = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: currentAssistantId
+      assistant_id: currentAssistantId,
+      temperature: 0.3
     });
 
     // Wait for title generation to complete
@@ -167,7 +207,8 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
     });
 
     const extractRun = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: currentAssistantId
+      assistant_id: currentAssistantId,
+      temperature: 0.2
     });
 
     // Wait for completion and get the extracted information
@@ -252,29 +293,98 @@ app.get('/assistant-memory/:assistantId', async (req: Request, res: Response) =>
       return res.status(400).json({ error: 'Assistant ID is required' });
     }
 
+    console.log('Fetching memory for assistant:', assistantId);
+
     // Fetch the assistant details
     const assistant = await openai.beta.assistants.retrieve(assistantId);
 
-    // Parse the instructions to extract memory
-    const instructions = assistant.instructions || '';
-    const memoryUpdates = instructions
-      .split('MEMORY UPDATE:')
-      .slice(1)
-      .join('\n')
-      .trim();
+    // Create a new thread to ask about learned preferences
+    const thread = await openai.beta.threads.create();
 
+    // Ask the assistant about what it knows
+    await openai.beta.threads.messages.create(thread.id, {
+      role: "user",
+      content: "Dont write anything else, just give me a list of all the personal information you know about me, nothing else.",
+    });
+
+    // Run the assistant
+    const run = await openai.beta.threads.runs.create(thread.id, {
+      assistant_id: assistantId,
+      temperature: 0.3
+    });
+
+    // Wait for completion
+    let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+    while (runStatus.status !== 'completed') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      
+      if (runStatus.status === 'failed') {
+        throw new Error('Assistant run failed');
+      }
+    }
+
+    // Get the response
+    const messages = await openai.beta.threads.messages.list(thread.id);
+    const memory = messages.data[0].content[0].type === 'text' 
+      ? messages.data[0].content[0].text.value 
+      : 'No memory available';
+
+    // Return both assistant details and memory summary
     res.json({
       assistant: {
         name: assistant.name,
+        instructions: assistant.instructions,
         created: assistant.created_at
       },
-      memory: memoryUpdates || 'No personal information has been shared yet.'
+      memory: memory
     });
 
   } catch (error) {
     console.error('Error fetching assistant memory:', error);
     res.status(500).json({ 
       error: 'Failed to fetch assistant memory',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Add this endpoint to handle memory updates
+app.put('/assistant-memory/:assistantId', async (req: Request, res: Response) => {
+  try {
+    const { assistantId } = req.params;
+    const { memory } = req.body;
+    
+    if (!assistantId) {
+      return res.status(400).json({ error: 'Assistant ID is required' });
+    }
+
+    // Fetch the current assistant
+    const assistant = await openai.beta.assistants.retrieve(assistantId);
+    
+    // Get current instructions and remove old memory updates
+    const baseInstructions = assistant.instructions?.split('MEMORY UPDATE:')[0].trim() || '';
+
+    // Create new instructions with updated memory
+    const updatedInstructions = `${baseInstructions}
+
+MEMORY UPDATE:
+${memory}`;
+
+    // Update the assistant with new instructions
+    await openai.beta.assistants.update(assistantId, {
+      instructions: updatedInstructions
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Memory updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating assistant memory:', error);
+    res.status(500).json({ 
+      error: 'Failed to update assistant memory',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
