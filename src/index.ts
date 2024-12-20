@@ -16,7 +16,7 @@ const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
 const upload = multer();
 // Add API configuration at the top
 const RENDER_URL = 'https://yoman-server.onrender.com'; 
-const LOCAL_URL = 'http://192.168.10.119:5000';
+const LOCAL_URL = 'http://192.168.10.141:5000';
 const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
 //const API_BASE_URL = LOCAL_URL;
 
@@ -36,6 +36,10 @@ const corsOptions = {
         'http://192.168.10.119',
         'http://192.168.10.68',
         'http://localhost:5000',
+        'http://192.168.10.110:5000',
+        'http://192.168.10.110',
+        'http://192.168.10.141:5000',
+        'http://192.168.10.141',
         RENDER_URL, // Add your Render URL
         '*' // Allow all origins in development (be careful with this in production)
     ],
@@ -52,7 +56,7 @@ app.use(express.json());
 
 // basic test route
 app.get('/test', (req, res) => {
-  res.json({ message: 'Server is running!' });
+  res.json({ message: 'Server is running!!' });
 });
 
 app.listen(port, '0.0.0.0', () => {
@@ -95,13 +99,13 @@ const STYLE_INSTRUCTIONS = {
     - Try to write the diary as most people would write it
     - Generate the output in the same language as the input`,
 
-  formal: `Transform this entry into a formal, structured diary style.
+  formal: `Generate the output in Hebrew!
+    - Transform this entry into a formal diary style, don't include seperate paragraphs for date, location or subject.  just write the content.
     - Use professional and refined language
     - Maintain proper grammar and punctuation
     - Organize thoughts in a clear, logical manner
     - Avoid colloquialisms and slang
-    - Focus on precise and articulate expression
-    - Generate the output in the same language as the input`,
+    - Focus on precise and articulate expression`,
 
   raw: `Keep this entry exactly as provided, with minimal modifications.
     - Maintain the original wording
