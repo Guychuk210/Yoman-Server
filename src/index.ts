@@ -15,9 +15,21 @@ import { Readable } from 'stream';
 dotenv.config();
 
 // Initialize Firebase Admin
-const serviceAccount = require('../config/firebase-service-account.json');
+const serviceAccount = {
+  type: process.env.FIREBASE_TYPE,
+  project_id: process.env.FIREBASE_PROJECT_ID,
+  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+  private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  client_email: process.env.FIREBASE_CLIENT_EMAIL,
+  client_id: process.env.FIREBASE_CLIENT_ID,
+  auth_uri: process.env.FIREBASE_AUTH_URI,
+  token_uri: process.env.FIREBASE_TOKEN_URI,
+  auth_provider_x509_cert_url: process.env.FIREBASE_AUTH_PROVIDER_X509_CERT_URL,
+  client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL
+};
+
 initializeApp({
-  credential: cert(serviceAccount)
+  credential: cert(serviceAccount as any)
 });
 
 // Get Firestore instance
@@ -26,18 +38,17 @@ const db = getFirestore();
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
 
-// Define a complete interface for the file
+// Define a simple interface for the file
 interface MulterFile {
     fieldname: string;
     originalname: string;
     encoding: string;
     mimetype: string;
     size: number;
-    stream: Readable;
-    destination: string;
-    filename: string;
-    path: string;
     buffer: Buffer;
+    destination?: string;
+    filename?: string;
+    path?: string;
 }
 
 // Define the request interface
