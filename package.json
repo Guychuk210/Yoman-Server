@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc && npm run copy-config",
     "copy-config": "copyfiles -u 1 \"config/**/*\" dist/",
-    "start": "node dist/index.js",
+    "start": "ts-node src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "postinstall": "tsc",
     "prebuild": "rimraf dist"
