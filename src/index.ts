@@ -8,6 +8,7 @@ import { Request, Response } from 'express';
 import OpenAI from 'openai';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { Multer } from 'multer';
 //import { serverTimestamp } from 'firebase-admin/firestore';
 
 // load env vars
