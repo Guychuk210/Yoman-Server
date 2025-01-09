@@ -6,9 +6,21 @@ import multer from 'multer';
 import axios from 'axios';
 import { Request, Response } from 'express';
 import OpenAI from 'openai';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+//import { serverTimestamp } from 'firebase-admin/firestore';
 
 // load env vars
 dotenv.config();
+
+// Initialize Firebase Admin
+const serviceAccount = require('../config/firebase-service-account.json');
+initializeApp({
+  credential: cert(serviceAccount)
+});
+
+// Get Firestore instance
+const db = getFirestore();
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
@@ -16,7 +28,7 @@ const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
 const upload = multer();
 // Add API configuration at the top
 const RENDER_URL = 'https://yoman-server.onrender.com'; 
-const LOCAL_URL = 'http://192.168.10.141:5000';
+const LOCAL_URL = 'http://192.168.1.101:5000';
 const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
 //const API_BASE_URL = LOCAL_URL;
 
@@ -127,12 +139,14 @@ const STYLE_INSTRUCTIONS = {
 // Modify the diary generation endpoint
 app.post('/generate-diary', async (req: Request, res: Response) => {
   try {
-    const { text, style, assistantId } = req.body;
+    const { text, style, assistantId, entryId, userId } = req.body;
+    
     console.log('=== Generate Diary Request ===');
     console.log('Style:', style);
-    console.log('AssistantId:', assistantId);
     console.log('Text length:', text?.length);
-    
+    console.log('EntryId:', entryId);
+    console.log('UserId:', userId);
+
     // If no assistantId is provided, create a new assistant
     let currentAssistantId = assistantId;
     if (!currentAssistantId) {
@@ -178,6 +192,7 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
     console.log('Diary entry generated, length:', diaryEntry.length);
 
     // Generate title using the same assistant
+    console.log('Generating title...');
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
       content: "Generate a short title for this diary entry. (Maximum 6 words)"
@@ -187,20 +202,22 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
       assistant_id: currentAssistantId,
       temperature: 0.3
     });
-
+    
     // Wait for title generation to complete
     let titleRunStatus = await openai.beta.threads.runs.retrieve(thread.id, titleRun.id);
     while (titleRunStatus.status !== 'completed') {
       await new Promise(resolve => setTimeout(resolve, 1000));
       titleRunStatus = await openai.beta.threads.runs.retrieve(thread.id, titleRun.id);
     }
-
+    console.log('Title generated');
     // Get title
     const titleMessages = await openai.beta.threads.messages.list(thread.id);
     const title = titleMessages.data[0].content[0].type === 'text'
       ? titleMessages.data[0].content[0].text.value
       : '';
 
+
+      console.log('Collecting information...');
     // After generating the diary entry, extract and store important information
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
@@ -221,7 +238,8 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       extractRunStatus = await openai.beta.threads.runs.retrieve(thread.id, extractRun.id);
     }
-
+    console.log('Information collected');
+    
     const extractMessages = await openai.beta.threads.messages.list(thread.id);
     const extractedInfo = extractMessages.data[0].content[0].type === 'text' 
       ? extractMessages.data[0].content[0].text.value 
@@ -232,33 +250,54 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
       await updateAssistantMemory(currentAssistantId, extractedInfo);
     }
 
-    res.json({ 
-      entry: diaryEntry,
+    // Update Firestore with the generated content
+    const entryRef = db.collection('users').doc(userId)
+      .collection('diaries').doc(entryId);
+
+    await entryRef.update({
+      generatedEntry: diaryEntry,
       title: title,
-      assistantId: currentAssistantId
+      style: style,
+      status: 'completed',
+      updatedAt: Timestamp.now()
     });
 
+    console.log('Updated Firestore with generated content');
+
+    res.json({ success: true });
+
   } catch (error) {
-    console.error('Diary generation error:', error);
-    res.status(500).json({ error: 'Failed to generate diary entry' });
+    console.error('Error generating diary:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate diary entry',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
 app.post('/transcribe', upload.single('audioFile'), async (req: Request, res: Response) => {
-    console.log('Transcribe route hit');
+    console.log('=== Transcription Request Started ===');
     try {
         if (!req.file) {
-            console.log('No audio file provided');
-            return;
+            console.log('[ERROR] No audio file provided');
+            return res.status(400).json({ error: 'No audio file provided' });
         }
-         // Log file details
-         console.log('[Server] File details:', {
-            fieldname: req.file.fieldname,
-            originalname: req.file.originalname,
-            mimetype: req.file.mimetype,
-            size: req.file.size,
-            buffer: `Buffer of size: ${req.file.buffer.length}`
+
+        const userId = req.headers['user-id'] as string;
+        const entryId = req.headers['entry-id'] as string;
+
+        console.log('[INFO] Request details:', {
+            userId,
+            entryId,
+            fileSize: req.file.size,
+            mimeType: req.file.mimetype
         });
+
+        if (!userId || !entryId) {
+            console.log('[ERROR] Missing headers:', { userId, entryId });
+            return res.status(400).json({ error: 'Missing required headers' });
+        }
+
         // Create form data for OpenAI API
         const formData = new FormData();
         formData.append('file', 
@@ -267,7 +306,7 @@ app.post('/transcribe', upload.single('audioFile'), async (req: Request, res: Re
         );
         formData.append('model', 'whisper-1');
 
-        console.log('[Server] Preparing OpenAI request...');
+        console.log('[INFO] Sending request to OpenAI Whisper API...');
 
         // Send to OpenAI Whisper API
         const whisperResponse = await axios.post(
@@ -281,11 +320,44 @@ app.post('/transcribe', upload.single('audioFile'), async (req: Request, res: Re
             }
         );
 
-        console.log('[Server] Received response from OpenAI:', whisperResponse.status);
-        console.log('[Server] Response data:', whisperResponse.data.text);
-        res.json({ transcript: whisperResponse.data.text });
+        console.log('[SUCCESS] Received Whisper response:', {
+            status: whisperResponse.status,
+            transcriptLength: whisperResponse.data.text.length
+        });
+
+        // Update Firestore with the transcript
+        console.log('[INFO] Updating Firestore...');
+        const docRef = db.collection('users').doc(userId)
+            .collection('diaries').doc(entryId);
+
+        await docRef.update({
+            transcript: whisperResponse.data.text
+        });
+
+        console.log('[SUCCESS] Firestore updated successfully');
+
+        res.json({ 
+            success: true,
+            transcript: whisperResponse.data.text 
+        });
+        
+        console.log('=== Transcription Request Completed ===');
+
     } catch (error) {
-        console.error('Transcription error:', error);
+        console.error('[ERROR] Transcription failed:', error);
+        
+        // More detailed error logging
+        if (axios.isAxiosError(error)) {
+            console.error('[ERROR] OpenAI API error:', {
+                status: error.response?.status,
+                data: error.response?.data
+            });
+        }
+
+        res.status(500).json({ 
+            error: 'Transcription failed',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 });
 

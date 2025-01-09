@@ -53,3 +53,6 @@ temp/
 *.pem
 *.key
 *.crt
+
+# Firebase
+config/firebase-service-account.json
