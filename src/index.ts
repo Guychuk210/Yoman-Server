@@ -8,7 +8,7 @@ import { Request, Response } from 'express';
 import OpenAI from 'openai';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { Multer } from 'multer';
+import { Readable } from 'stream';
 //import { serverTimestamp } from 'firebase-admin/firestore';
 
 // load env vars
@@ -25,6 +25,25 @@ const db = getFirestore();
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
+
+// Define a complete interface for the file
+interface MulterFile {
+    fieldname: string;
+    originalname: string;
+    encoding: string;
+    mimetype: string;
+    size: number;
+    stream: Readable;
+    destination: string;
+    filename: string;
+    path: string;
+    buffer: Buffer;
+}
+
+// Define the request interface
+interface MulterRequest extends Request {
+    file?: MulterFile;
+}
 
 const upload = multer();
 // Add API configuration at the top
@@ -275,11 +294,6 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
     });
   }
 });
-
-// Create an interface that extends Express Request to include the file
-interface MulterRequest extends Request {
-  file?: Express.Multer.File;
-}
 
 // Update the transcribe endpoint with the correct type
 app.post('/transcribe', upload.single('audioFile'), async (req: MulterRequest, res: Response) => {
