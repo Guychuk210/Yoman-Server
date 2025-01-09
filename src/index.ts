@@ -282,7 +282,13 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/transcribe', upload.single('audioFile'), async (req: Request, res: Response) => {
+// Create an interface that extends Express Request to include the file
+interface MulterRequest extends Request {
+  file?: Express.Multer.File;
+}
+
+// Update the transcribe endpoint with the correct type
+app.post('/transcribe', upload.single('audioFile'), async (req: MulterRequest, res: Response) => {
     console.log('=== Transcription Request Started ===');
     try {
         if (!req.file) {
