@@ -142,12 +142,12 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
     const { text, style, assistantId, entryId, userId } = req.body;
     
     console.log('=== Generate Diary Request ===');
+    console.log('AssistantId received:', assistantId);
     console.log('Style:', style);
-    console.log('Text length:', text?.length);
     console.log('EntryId:', entryId);
     console.log('UserId:', userId);
 
-    // If no assistantId is provided, create a new assistant
+    // If no assistantId is provided, create a new assistant and save it
     let currentAssistantId = assistantId;
     if (!currentAssistantId) {
       console.log('Creating new assistant...');
@@ -160,7 +160,14 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
         tools: []
       });
       currentAssistantId = assistant.id;
-      console.log('New assistant created:', currentAssistantId);
+      
+      // Save the new assistant ID to the user's document
+      const userRef = db.collection('users').doc(userId);
+      await userRef.update({
+        assistantId: currentAssistantId
+      });
+      
+      console.log('New assistant created and saved:', currentAssistantId);
     }
 
     // Create thread and add initial message with style-specific instructions
