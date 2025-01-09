@@ -3,21 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/index.ts",
-    "build": "tsc && npm run copy-config",
-    "copy-config": "copyfiles -u 1 \"config/**/*\" dist/",
     "start": "ts-node src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "tsc",
-    "prebuild": "rimraf dist"
+    "build": "tsc",
+    "dev": "nodemon --exec ts-node src/index.ts"
   },
-  "engines": {
-    "node": ">=14.0.0"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "axios": "^1.7.9",
     "cors": "^2.8.5",
@@ -26,16 +15,14 @@
     "firebase-admin": "^13.0.2",
     "form-data": "^4.0.1",
     "multer": "^1.4.5-lts.1",
-    "node-fetch": "^3.3.2",
-    "@types/multer": "^1.4.12",
     "openai": "^4.20.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
     "@types/node": "^20.10.4",
     "nodemon": "^3.0.2",
-    "rimraf": "^5.0.5",
     "ts-node": "^10.9.1",
     "typescript": "^5.3.3"
   }
