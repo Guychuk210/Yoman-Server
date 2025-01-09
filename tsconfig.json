@@ -10,7 +10,7 @@
       "forceConsistentCasingInFileNames": true,
       "noImplicitAny": false,
       "moduleResolution": "node",
-      "types": ["node", "Multer"],
+      //"types": ["node"],
     },
     "include": ["src/**/*"],
     "exclude": ["node_modules"]
