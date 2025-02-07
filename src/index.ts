@@ -14,6 +14,13 @@ import { Readable } from 'stream';
 // load env vars
 dotenv.config();
 
+// Add some debug logging
+console.log('Firebase Config:', {
+  type: process.env.FIREBASE_TYPE,
+  project_id: process.env.FIREBASE_PROJECT_ID,
+  // ... log other non-sensitive fields
+});
+
 // Initialize Firebase Admin
 const serviceAccount = {
   type: process.env.FIREBASE_TYPE,
@@ -38,20 +45,21 @@ const db = getFirestore();
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
 
-// Define a simple interface for the file
+// Define the complete MulterFile interface
 interface MulterFile {
     fieldname: string;
     originalname: string;
     encoding: string;
     mimetype: string;
     size: number;
+    stream: Readable;
+    destination: string;
+    filename: string;
+    path: string;
     buffer: Buffer;
-    destination?: string;
-    filename?: string;
-    path?: string;
 }
 
-// Define the request interface
+// Define the MulterRequest interface
 interface MulterRequest extends Request {
     file?: MulterFile;
 }
@@ -59,7 +67,7 @@ interface MulterRequest extends Request {
 const upload = multer();
 // Add API configuration at the top
 const RENDER_URL = 'https://yoman-server.onrender.com'; 
-const LOCAL_URL = 'http://192.168.1.101:5000';
+const LOCAL_URL = 'http://10.100.102.2:5000';
 const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
 //const API_BASE_URL = LOCAL_URL;
 
@@ -75,19 +83,21 @@ const corsOptions = {
         'http://localhost:19000',
         'exp://localhost:19000',
         'exp://192.168.1.*',
-        'http://192.168.1.*',
-        'http://192.168.10.119',
-        'http://192.168.10.68',
         'http://localhost:5000',
-        'http://192.168.10.110:5000',
-        'http://192.168.10.110',
-        'http://192.168.10.141:5000',
-        'http://192.168.10.141',
-        RENDER_URL, // Add your Render URL
-        '*' // Allow all origins in development (be careful with this in production)
+        'http://192.168.56.1:5000',
+        RENDER_URL,
+        'exp://192.168.56.1:19000',
+        'exp://localhost:19000',
+        'exp://127.0.0.1:19000',
+        'exp://exp.host/*',           // Add this for Expo Go
+        'https://exp.host/*',         // Add this for Expo Go
+        'exp://*',                    // Add this to allow all Expo origins
+        'https://*.exp.direct',       // Add this for Expo Go
+        'http://10.100.102.2:5000',
+        'exp://10.100.102.2:19000',
     ],
     methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'entry-id', 'user-id', 'Content-Type'],
     credentials: true
 };
 
@@ -100,6 +110,7 @@ app.use(express.json());
 // basic test route
 app.get('/test', (req, res) => {
   res.json({ message: 'Server is running!!' });
+  console.log("Recieved test request, Server is running!");
 });
 
 app.listen(port, '0.0.0.0', () => {
