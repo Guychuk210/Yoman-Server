@@ -184,15 +184,13 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
     const { text, style, assistantId, entryId, userId } = req.body;
     
     console.log('=== Generate Diary Request ===');
-    console.log('Style:', style);
-    console.log('Text length:', text?.length);
-    console.log('EntryId:', entryId);
-    console.log('UserId:', userId);
-
+    console.log('Received assistantId:', assistantId);
+    console.log('User ID:', userId);
+    
     // If no assistantId is provided, create a new assistant
     let currentAssistantId = assistantId;
     if (!currentAssistantId) {
-      console.log('Creating new assistant...');
+      console.log('No assistant ID found, creating new assistant...');
       const assistant = await openai.beta.assistants.create({
         name: "Personal Diary Assistant",
         instructions: `You are a diary assistant. Your role is to help transform thoughts and experiences into diary entries. In general, don't change text and style too much, but make it more organized and personal.
@@ -202,7 +200,17 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
         tools: []
       });
       currentAssistantId = assistant.id;
-      console.log('New assistant created:', currentAssistantId);
+      
+      console.log('New assistant created with ID:', currentAssistantId);
+      
+      // Store the new assistantId in user's document
+      await db.collection('users').doc(userId).update({
+        assistantId: currentAssistantId
+      });
+      
+      console.log('Assistant ID stored in user document');
+    } else {
+      console.log('Using existing assistant:', currentAssistantId);
     }
 
     // Create thread and add initial message with style-specific instructions
