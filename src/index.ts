@@ -67,7 +67,7 @@ interface MulterRequest extends Request {
 const upload = multer();
 // Add API configuration at the top
 const RENDER_URL = 'https://yoman-server.onrender.com'; 
-const LOCAL_URL = 'http://10.100.102.2:5000';
+const LOCAL_URL = 'http://10.50.9.3:5000';
 const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
 //const API_BASE_URL = LOCAL_URL;
 
@@ -93,7 +93,7 @@ const corsOptions = {
         'https://exp.host/*',         // Add this for Expo Go
         'exp://*',                    // Add this to allow all Expo origins
         'https://*.exp.direct',       // Add this for Expo Go
-        'http://10.100.102.2:5000',
+        'http://10.50.9.3:5000',
         'exp://10.100.102.2:19000',
     ],
     methods: ['GET', 'POST'],
@@ -178,14 +178,26 @@ const STYLE_INSTRUCTIONS = {
     - Generate the output in the same language as the input`,
 };
 
-// Modify the diary generation endpoint
+// First endpoint for diary generation
 app.post('/generate-diary', async (req: Request, res: Response) => {
   try {
-    const { text, style, assistantId, entryId, userId } = req.body;
+    const { text, style, assistantId, entryId, userId, title } = req.body;
     
     console.log('=== Generate Diary Request ===');
     console.log('Received assistantId:', assistantId);
     console.log('User ID:', userId);
+    console.log('Entry Title:', title);
+    
+    // Create user document if it doesn't exist
+    const userRef = db.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+    
+    if (!userDoc.exists) {
+      console.log('Creating new user document');
+      await userRef.set({
+        createdAt: Timestamp.now(),
+      });
+    }
     
     // If no assistantId is provided, create a new assistant
     let currentAssistantId = assistantId;
@@ -203,8 +215,7 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
       
       console.log('New assistant created with ID:', currentAssistantId);
       
-      // Store the new assistantId in user's document
-      await db.collection('users').doc(userId).update({
+      await userRef.update({
         assistantId: currentAssistantId
       });
       
@@ -213,15 +224,19 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
       console.log('Using existing assistant:', currentAssistantId);
     }
 
-    // Create thread and add initial message with style-specific instructions
+    console.log('Creating thread for diary generation...');
     const thread = await openai.beta.threads.create();
+    console.log('Thread created:', thread.id);
+
+    console.log('Starting diary generation...');
+    // Create thread and add initial message with style-specific instructions
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
       content: `Style Instructions: ${STYLE_INSTRUCTIONS[style as keyof typeof STYLE_INSTRUCTIONS]}            
                 Content to transform: ${text}`
     });
 
-    // Start first run and wait for completion
+    // Start run and wait for completion
     const run = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: currentAssistantId,
       temperature: 0.3
@@ -230,7 +245,7 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
     // Wait for the run to complete
     let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
     while (runStatus.status !== 'completed') {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      await new Promise(resolve => setTimeout(resolve, 1000));
       runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
     }
 
@@ -241,34 +256,64 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
       : '';
     console.log('Diary entry generated, length:', diaryEntry.length);
 
-    // Generate title using the same assistant
-    console.log('Generating title...');
-    await openai.beta.threads.messages.create(thread.id, {
-      role: "user",
-      content: "Generate a short title for this diary entry. (Maximum 6 words)"
+    console.log('Diary generation completed:', {
+      entryLength: diaryEntry.length,
     });
 
-    const titleRun = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: currentAssistantId,
-      temperature: 0.3
+    // Update Firestore with the generated content
+    const entryRef = db.collection('users').doc(userId)
+      .collection('diaries').doc(entryId);
+
+    await entryRef.update({
+      generatedEntry: diaryEntry,
+      title: title,
+      status: 'completed',
+      updatedAt: Timestamp.now()
     });
-    
-    // Wait for title generation to complete
-    let titleRunStatus = await openai.beta.threads.runs.retrieve(thread.id, titleRun.id);
-    while (titleRunStatus.status !== 'completed') {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      titleRunStatus = await openai.beta.threads.runs.retrieve(thread.id, titleRun.id);
+
+    console.log('Firestore update completed');
+
+    console.log('=== Generate Diary Request Completed ===\n');
+
+    res.json({ 
+      success: true,
+      assistantId: currentAssistantId // Return assistantId for subsequent calls
+    });
+
+  } catch (error) {
+    console.error('\n=== Generate Diary Error ===');
+    console.error('Timestamp:', new Date().toISOString());
+    console.error('Error:', error);
+    console.error('=== Error End ===\n');
+    res.status(500).json({ 
+      error: 'Failed to generate diary entry',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Second endpoint for collecting information
+app.post('/collect-information', async (req: Request, res: Response) => {
+  try {
+    const { text, assistantId, userId } = req.body;
+
+    console.log('\n=== Collect Information Request Started ===');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Request Details:', {
+      userId,
+      hasAssistantId: !!assistantId,
+      textLength: text?.length
+    });
+
+    if (!assistantId) {
+      throw new Error('Assistant ID is required for information collection');
     }
-    console.log('Title generated');
-    // Get title
-    const titleMessages = await openai.beta.threads.messages.list(thread.id);
-    const title = titleMessages.data[0].content[0].type === 'text'
-      ? titleMessages.data[0].content[0].text.value
-      : '';
 
+    console.log('Creating thread for information collection...');
+    const thread = await openai.beta.threads.create();
+    console.log('Thread created:', thread.id);
 
-      console.log('Collecting information...');
-    // After generating the diary entry, extract and store important information
+    console.log('Starting information extraction...');
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
       content: `Please analyze this diary entry and extract important personal information about the user:
@@ -278,48 +323,48 @@ app.post('/generate-diary', async (req: Request, res: Response) => {
     });
 
     const extractRun = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: currentAssistantId,
+      assistant_id: assistantId,
       temperature: 0.2
     });
 
-    // Wait for completion and get the extracted information
+    // Wait for completion
     let extractRunStatus = await openai.beta.threads.runs.retrieve(thread.id, extractRun.id);
     while (extractRunStatus.status !== 'completed') {
       await new Promise(resolve => setTimeout(resolve, 1000));
       extractRunStatus = await openai.beta.threads.runs.retrieve(thread.id, extractRun.id);
     }
-    console.log('Information collected');
     
     const extractMessages = await openai.beta.threads.messages.list(thread.id);
     const extractedInfo = extractMessages.data[0].content[0].type === 'text' 
       ? extractMessages.data[0].content[0].text.value 
       : '';
 
-    // Update assistant memory with new information
+    console.log('Information extraction completed');
+    console.log('Extracted Information:');
+    console.log('------------------------');
+    console.log(extractedInfo);
+    console.log('------------------------');
+
     if (extractedInfo) {
-      await updateAssistantMemory(currentAssistantId, extractedInfo);
+      console.log('Updating assistant memory...');
+      await updateAssistantMemory(assistantId, extractedInfo);
+      console.log('Assistant memory updated successfully');
     }
 
-    // Update Firestore with the generated content
-    const entryRef = db.collection('users').doc(userId)
-      .collection('diaries').doc(entryId);
+    console.log('=== Collect Information Request Completed ===\n');
 
-    await entryRef.update({
-      generatedEntry: diaryEntry,
-      title: title,
-      style: style,
-      status: 'completed',
-      updatedAt: Timestamp.now()
+    res.json({ 
+      success: true, 
+      extractedInfo 
     });
 
-    console.log('Updated Firestore with generated content');
-
-    res.json({ success: true });
-
   } catch (error) {
-    console.error('Error generating diary:', error);
+    console.error('\n=== Collect Information Error ===');
+    console.error('Timestamp:', new Date().toISOString());
+    console.error('Error:', error);
+    console.error('=== Error End ===\n');
     res.status(500).json({ 
-      error: 'Failed to generate diary entry',
+      error: 'Failed to collect information',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -382,7 +427,10 @@ app.post('/transcribe', upload.single('audioFile'), async (req: MulterRequest, r
             .collection('diaries').doc(entryId);
 
         await docRef.update({
-            transcript: whisperResponse.data.text
+            transcript: whisperResponse.data.text,
+            status: 'draft',
+            isProcessing: false,
+            updatedAt: Timestamp.now(),
         });
 
         console.log('[SUCCESS] Firestore updated successfully');
