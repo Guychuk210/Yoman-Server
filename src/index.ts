@@ -9,7 +9,6 @@ import OpenAI from 'openai';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { Readable } from 'stream';
-//import { serverTimestamp } from 'firebase-admin/firestore';
 
 // load env vars
 dotenv.config();
@@ -66,8 +65,8 @@ interface MulterRequest extends Request {
 
 const upload = multer();
 // Add API configuration at the top
-const RENDER_URL = 'https://yoman-server.onrender.com'; 
-const LOCAL_URL = 'http://10.50.9.3:5000';
+const RENDER_URL = process.env.RENDER_URL; 
+const LOCAL_URL = process.env.LOCAL_URL;
 const API_BASE_URL = process.env.NODE_ENV === 'production' ? RENDER_URL : LOCAL_URL;
 //const API_BASE_URL = LOCAL_URL;
 
@@ -79,22 +78,25 @@ const openai = new OpenAI({
 // Update CORS options to accept requests from your Render domain
 const corsOptions = {
     origin: [
-        'http://localhost:19006',
-        'http://localhost:19000',
-        'exp://localhost:19000',
-        'exp://192.168.1.*',
-        'http://localhost:5000',
-        'http://192.168.56.1:5000',
-        RENDER_URL,
-        'exp://192.168.56.1:19000',
-        'exp://localhost:19000',
-        'exp://127.0.0.1:19000',
-        'exp://exp.host/*',           // Add this for Expo Go
-        'https://exp.host/*',         // Add this for Expo Go
-        'exp://*',                    // Add this to allow all Expo origins
-        'https://*.exp.direct',       // Add this for Expo Go
-        'http://10.50.9.3:5000',
-        'exp://10.100.102.2:19000',
+        // 'http://localhost:19006',
+        // 'http://localhost:19000',
+        // 'exp://localhost:19000',
+        // 'exp://192.168.1.*',
+        // 'http://localhost:4000',
+        // 'http://192.168.56.1:4000',
+        // RENDER_URL,
+        // 'exp://192.168.56.1:19000',
+        // 'exp://localhost:19000',
+        // 'exp://127.0.0.1:19000',
+        // 'exp://exp.host/*',           // Add this for Expo Go
+        // 'https://exp.host/*',         // Add this for Expo Go
+        // 'exp://*',                    // Add this to allow all Expo origins
+        // 'https://*.exp.direct',       // Add this for Expo Go
+        // 'http://10.50.9.3:4000',
+        // 'http://192.168.56.1:4000',
+        // 'exp://10.100.102.2:19000',
+        // 'http://10.100.102.8:5000',
+        // 'http://10.100.102.8:4000'
     ],
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization', 'entry-id', 'user-id', 'Content-Type'],

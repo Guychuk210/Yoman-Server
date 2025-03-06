@@ -3,7 +3,7 @@ import FormData from 'form-data';
 import axios from 'axios';
 import path from 'path';
 
-const LOCAL_URL = 'http://192.168.10.141:5000';
+const LOCAL_URL = process.env.LOCAL_URL;
 
 async function transcribeFile(filePath) {
   try {
